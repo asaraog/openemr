@@ -1177,16 +1177,6 @@ $ignoreErrors[] = [
     'path' => __DIR__ . '/../../library/MedEx/API.php',
 ];
 $ignoreErrors[] = [
-    'message' => '#^Variable \\$no_fu might not be defined\\.$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../library/MedEx/API.php',
-];
-$ignoreErrors[] = [
-    'message' => '#^Variable \\$no_interval might not be defined\\.$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../library/MedEx/API.php',
-];
-$ignoreErrors[] = [
     'message' => '#^Variable \\$pid_list might not be defined\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../library/MedEx/API.php',
@@ -1225,11 +1215,6 @@ $ignoreErrors[] = [
     'message' => '#^Variable \\$result4 might not be defined\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../library/ajax/adminacl_ajax.php',
-];
-$ignoreErrors[] = [
-    'message' => '#^Undefined variable\\: \\$default$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../library/ajax/code_attributes_ajax.php',
 ];
 $ignoreErrors[] = [
     'message' => '#^Variable \\$fileroot might not be defined\\.$#',
@@ -1290,11 +1275,6 @@ $ignoreErrors[] = [
     'message' => '#^Variable \\$rtn might not be defined\\.$#',
     'count' => 2,
     'path' => __DIR__ . '/../../library/ajax/upload.php',
-];
-$ignoreErrors[] = [
-    'message' => '#^Undefined variable\\: \\$provider$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../library/amc.php',
 ];
 $ignoreErrors[] = [
     'message' => '#^Undefined variable\\: \\$pid$#',
@@ -1512,11 +1492,6 @@ $ignoreErrors[] = [
     'path' => __DIR__ . '/../../library/payment.inc.php',
 ];
 $ignoreErrors[] = [
-    'message' => '#^Variable \\$all might not be defined\\.$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../library/registry.inc.php',
-];
-$ignoreErrors[] = [
     'message' => '#^Variable \\$tempCollectReminders might not be defined\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../library/reminders.php',
@@ -1655,11 +1630,6 @@ $ignoreErrors[] = [
     'message' => '#^Variable \\$starttime might not be defined\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../portal/add_edit_event_user.php',
-];
-$ignoreErrors[] = [
-    'message' => '#^Variable \\$providerid might not be defined\\.$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../portal/find_appt_popup_user.php',
 ];
 $ignoreErrors[] = [
     'message' => '#^Variable \\$pid might not be defined\\.$#',
@@ -2042,11 +2012,6 @@ $ignoreErrors[] = [
     'path' => __DIR__ . '/../../src/Billing/Claim.php',
 ];
 $ignoreErrors[] = [
-    'message' => '#^Variable \\$tmp might not be defined\\.$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../src/Billing/Claim.php',
-];
-$ignoreErrors[] = [
     'message' => '#^Variable \\$elog might not be defined\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../src/Billing/EDI270.php',
@@ -2055,11 +2020,6 @@ $ignoreErrors[] = [
     'message' => '#^Variable \\$returnval might not be defined\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../src/Billing/EDI270.php',
-];
-$ignoreErrors[] = [
-    'message' => '#^Undefined variable\\: \\$st_pos$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../src/Billing/EdiHistory/X12File.php',
 ];
 $ignoreErrors[] = [
     'message' => '#^Variable \\$bht_pos might not be defined\\.$#',
@@ -2147,11 +2107,6 @@ $ignoreErrors[] = [
     'path' => __DIR__ . '/../../src/Common/Acl/AclExtended.php',
 ];
 $ignoreErrors[] = [
-    'message' => '#^Variable \\$response might not be defined\\.$#',
-    'count' => 1,
-    'path' => __DIR__ . '/../../src/Common/Auth/MfaUtils.php',
-];
-$ignoreErrors[] = [
     'message' => '#^Variable \\$fhirScopes might not be defined\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../src/Common/Command/GenerateAccessTokenCommand.php',
@@ -2210,11 +2165,6 @@ $ignoreErrors[] = [
     'message' => '#^Variable \\$table might not be defined\\.$#',
     'count' => 2,
     'path' => __DIR__ . '/../../src/Gacl/GaclApi.php',
-];
-$ignoreErrors[] = [
-    'message' => '#^Variable \\$catEntry might not be defined\\.$#',
-    'count' => 5,
-    'path' => __DIR__ . '/../../src/Menu/MainMenuRole.php',
 ];
 $ignoreErrors[] = [
     'message' => '#^Variable \\$action might not be defined\\.$#',

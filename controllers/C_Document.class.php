@@ -83,7 +83,7 @@ class C_Document extends Controller
         $this->templateService = new DocumentTemplateService();
     }
 
-    public function upload_action($patient_id, $category_id)
+    public function upload_action($patient_id, $category_id): string
     {
         $category_name = $this->tree->get_node_name($category_id);
         $this->assign("category_id", $category_id);
@@ -358,6 +358,17 @@ class C_Document extends Controller
             return;
         }
         $session = SessionWrapperFactory::getInstance()->getActiveSession();
+
+        // Anti-IDOR: a note association or document email always targets a
+        // document via foreign_id; restrict it to a document the caller can
+        // access in the current patient context so an arbitrary document cannot
+        // be emailed out or annotated.
+        $documentForeignId = filter_input(INPUT_POST, 'foreign_id');
+        if (is_string($documentForeignId) && $documentForeignId !== '') {
+            $patientContext = is_scalar($patient_id) ? (string) $patient_id : null;
+            $this->authorizeDocumentWrite($patientContext, $documentForeignId);
+        }
+
         $n = new Note();
         $n->set_owner($session->get('authUserID'));
         parent::populate_object($n);
@@ -426,7 +437,7 @@ class C_Document extends Controller
         return $this->list_action();
     }
 
-    public function view_action(?string $patient_id, $doc_id)
+    public function view_action(?string $patient_id, $doc_id): string
     {
         $ISSUE_TYPES = IssueTypeRegistry::issueTypes();
 
@@ -453,6 +464,9 @@ class C_Document extends Controller
 
         $notes = $d->get_notes();
 
+        // The delete link sends this as document_pid; deleter.php refuses a document filed under another patient.
+        $documentPid = $patient_id === null ? 0 : (int) $patient_id;
+        $this->assign("document_pid", $documentPid);
         $this->assign("csrf_token_form", CsrfUtils::collectCsrfToken(session: $session));
 
         $this->assign("file", $d);
@@ -465,7 +479,9 @@ class C_Document extends Controller
 
         // Added by Rod to support document delete:
         $delete_string = '';
-        if (AclMain::aclCheckCore('patients', 'docs_rm')) {
+        // Without the document's own patient as context deleter.php refuses the delete, so offer no link.
+        $deleteAllowed = is_numeric($doc_pid) && (int) $doc_pid === $documentPid;
+        if ($deleteAllowed && AclMain::aclCheckCore('patients', 'docs_rm')) {
             $delete_string = "<a href='' class='btn btn-danger' onclick='return deleteme(" . attr_js($d->get_id()) .
                 ")'>" . xlt('Delete') . "</a>";
         }
@@ -907,10 +923,10 @@ class C_Document extends Controller
             //special case when retrieving a document that has been converted to a jpg and not directly referenced in database
             //try to convert it if it has not yet been converted
             $originalUrl = $url;
-            if (strrpos((string) basename_international($url), '.') === false) {
+            if (strrpos(basename_international($url), '.') === false) {
                 $convertedFile = basename_international($url) . '_converted.jpg';
             } else {
-                $convertedFile = substr((string) basename_international($url), 0, strrpos((string) basename_international($url), '.')) . '_converted.jpg';
+                $convertedFile = substr(basename_international($url), 0, strrpos(basename_international($url), '.')) . '_converted.jpg';
             }
             $url = OEGlobalsBag::getInstance()->get('OE_SITE_DIR') . '/documents/' . $from_pathname . '/' . $convertedFile;
             if (!is_file($url)) {
@@ -963,6 +979,95 @@ class C_Document extends Controller
         }
     }
 
+    /**
+     * Authorize a mutating action against an existing document (anti-IDOR guard).
+     *
+     * The document read path (retrieve_action()/view_action()) is deliberately
+     * hardened against IDOR, but the write path historically was not: any
+     * authenticated user could reassign or otherwise mutate an arbitrary
+     * document by id - for example move it to a patient/category they legitimately
+     * have access to - and then read it back through the ACL-checked download
+     * path, bypassing document access controls entirely.
+     *
+     * This guard mirrors the read-path checks so a caller may only mutate a
+     * document they can already access in its current state:
+     *   1. The caller must satisfy the ACL (aco_spec) of every category the
+     *      document currently belongs to (Document::can_access()).
+     *   2. The document must belong to the patient context supplied with the
+     *      request (foreign_id === patient_id), matching the read-path check.
+     *
+     * Denials are logged and audited, then the request is terminated with a
+     * 403 through the standard controller exception path.
+     *
+     * Service/CLI callers that have explicitly opted out of ACL enforcement
+     * (see skipAclCheck(), used by background/import processes) are exempt.
+     *
+     * @param ?string $patient_id  Patient context (pid) from the request
+     * @param mixed   $document_id documents.id being mutated
+     * @return Document The loaded, access-checked document
+     */
+    private function authorizeDocumentWrite(?string $patient_id, $document_id): Document
+    {
+        $d = new Document($document_id);
+
+        if ($this->isSkipAclCheck()) {
+            return $d;
+        }
+
+        $docPid = $d->get_foreign_id();
+        // The document must belong to the requested patient context. Fail closed:
+        // a null/absent patient context, or a missing/non-numeric document
+        // foreign_id, can never establish that the caller is operating on this
+        // document within the patient it belongs to, so all three are treated as
+        // a mismatch. Note that empty request parameters (e.g. "patient_id=")
+        // arrive here as null via Controller::dispatch(), so a permissive null
+        // would let a caller drop the patient context and bypass this check while
+        // still passing the category ACL below.
+        $patientMismatch = $patient_id === null
+            || !is_numeric($docPid)
+            || (int) $docPid !== (int) $patient_id;
+
+        if (!$d->can_access() || $patientMismatch) {
+            $session = SessionWrapperFactory::getInstance()->getActiveSession();
+            $documentIdLabel = is_scalar($document_id) ? (string) $document_id : '';
+            $docPidLabel = is_scalar($docPid) ? (string) $docPid : '';
+            ServiceContainer::getLogger()->warning(
+                "An attempt was made to modify a document without authorization",
+                [
+                    'user-id' => $session->get('authUserID'),
+                    'requested-patient-id' => $patient_id,
+                    'document-patient-id' => $docPid,
+                    'document-id' => $document_id,
+                ]
+            );
+            $this->throwAccessDenied(
+                "Unauthorized attempt to modify document " . $documentIdLabel . " belonging to pid " . $docPidLabel,
+                xl("Not authorized to modify the requested document")
+            );
+        }
+
+        return $d;
+    }
+
+    /**
+     * Verify the caller may file a document into the given destination category.
+     *
+     * Mirrors the destination-category ACL check performed on upload
+     * (upload_action_process()) so a move cannot place a document into a
+     * category the caller is not permitted to write to.
+     *
+     * @param mixed $category_id categories.id being targeted
+     */
+    private function canAccessDestinationCategory($category_id): bool
+    {
+        if ($this->isSkipAclCheck()) {
+            return true;
+        }
+        $category = QueryUtils::querySingleRow("SELECT `aco_spec` FROM `categories` WHERE `id` = ?", [$category_id]);
+        $acoSpec = is_array($category) ? ($category['aco_spec'] ?? null) : null;
+        return AclMain::aclCheckAcoSpec($acoSpec) !== false;
+    }
+
     public function move_action_process(?string $patient_id, $document_id)
     {
         if ($_POST['process'] != "true") {
@@ -972,22 +1077,23 @@ class C_Document extends Controller
         if (!is_numeric($document_id)) {
             $this->throwAccessDenied("Invalid document id for move", xl("Documents"));
         }
-        $docIdInt = (int) $document_id;
 
-        // Require write authorization plus per-doc access before mutating any state.
+        // Require the blanket document-write ACL before mutating any state
+        // (upstream #13353). CONTROLLER_ACL_MAP has no 'document' entry, so this
+        // is the coarse gate; the per-document guard below adds the fine-grained,
+        // context-bound check.
         if (!AclMain::aclCheckCore('patients', 'docs', '', ['write', 'addonly'])) {
             $this->throwAccessDenied("ACL check failed for patients/docs write|addonly: Documents", xl("Documents"));
         }
-        $sourceDoc = new Document($docIdInt);
-        $sourceDocForeignId = $sourceDoc->get_foreign_id();
-        if (
-            !is_numeric($sourceDoc->get_id())
-            || !is_numeric($sourceDocForeignId)
-            || (int) $sourceDocForeignId <= 0
-            || !$sourceDoc->can_access()
-        ) {
-            AccessDeniedHelper::deny("Unauthorized attempt to move document $docIdInt");
-        }
+
+        // Anti-IDOR: the caller must be able to access the document in its
+        // current state before they may move it. Without this a low-privilege
+        // user could reassign a document out of a restricted category/patient
+        // and then read it via the ACL-checked download path.
+        // authorizeDocumentWrite() subsumes the per-document existence/can_access()
+        // check and additionally binds the mutation to the request's patient
+        // context, and returns the loaded document for reuse below.
+        $d = $this->authorizeDocumentWrite($patient_id, $document_id);
 
         $messages = '';
 
@@ -996,6 +1102,13 @@ class C_Document extends Controller
 
         //move to new category
         if (is_numeric($new_category_id)) {
+            // caller must also be permitted to file into the destination category
+            if (!$this->canAccessDestinationCategory($new_category_id)) {
+                $this->throwAccessDenied(
+                    "Unauthorized attempt to move document " . $document_id . " to category " . $new_category_id,
+                    xl("Not authorized to move the document to the selected category")
+                );
+            }
             $sql = "UPDATE categories_to_documents set category_id = ? where document_id = ?";
             $messages .= sprintf("%s '%s' %s\n", xl('Document moved to new category'), $this->tree->_id_name[$new_category_id]['name'], xl('successfully.'));
             //echo $sql;
@@ -1004,7 +1117,7 @@ class C_Document extends Controller
 
         //move to new patient
         if (is_numeric($new_patient_id)) {
-            $d = new Document((int) $document_id);
+            // $d was already loaded and access-checked by authorizeDocumentWrite() above
             $sql = "SELECT pid from patient_data where pid = ?";
             $result = QueryUtils::querySingleRow($sql, [$new_patient_id]);
 
@@ -1028,8 +1141,9 @@ class C_Document extends Controller
 
     public function validate_action_process(?string $patient_id, $document_id)
     {
-
-        $d = new Document($document_id);
+        // Anti-IDOR: validation reads the document's file content and may
+        // persist a hash, so restrict it to a document the caller can access.
+        $d = $this->authorizeDocumentWrite($patient_id, $document_id);
         if ($d->couch_docid && $d->couch_revid) {
             $file_path = OEGlobalsBag::getInstance()->get('OE_SITE_DIR') . '/documents/temp/';
             $url = $file_path . $d->get_url();
@@ -1113,13 +1227,16 @@ class C_Document extends Controller
             return;
         }
 
+        // Anti-IDOR: only permit metadata updates on a document the caller can
+        // already access in its current patient/category context.
+        $d = $this->authorizeDocumentWrite($patient_id, $document_id);
+
         $docdate = $_POST['docdate'];
         $docname = $_POST['docname'];
         $issue_id = $_POST['issue_id'];
 
         if (is_numeric($document_id)) {
             $messages = '';
-            $d = new Document($document_id);
             $file_name = $d->get_name();
             if (
                 $docname != '' &&
@@ -1186,7 +1303,9 @@ class C_Document extends Controller
             if ((int)$cur_pid > 0) {
                 $query = "select fname, lname from patient_data WHERE pid = ?";
                 $name = sqlQuery($query, [$cur_pid]);
-                $place_hld = $name['fname'] . ' ' . $name['lname'];
+                if (is_array($name)) {
+                    $place_hld = $name['fname'] . ' ' . $name['lname'];
+                }
             }
         }
         if (!AclMain::aclCheckCore('patients', 'docs')) {
@@ -1348,6 +1467,9 @@ class C_Document extends Controller
             return;
         }
         $session = SessionWrapperFactory::getInstance()->getActiveSession();
+        // Anti-IDOR: only permit tagging a document the caller can already
+        // access in its current patient/category context.
+        $d = $this->authorizeDocumentWrite($patient_id, $document_id);
         // Create Encounter and Tag it.
         $event_date = date('Y-m-d H:i:s');
         $encounter_id = $_POST['encounter_id'];
@@ -1356,7 +1478,6 @@ class C_Document extends Controller
 
         if (is_numeric($document_id)) {
             $messages = '';
-            $d = new Document($document_id);
             $file_name = $d->get_url_file();
             if (!is_numeric($encounter_id)) {
                 $encounter_id = 0;
@@ -1408,8 +1529,10 @@ class C_Document extends Controller
         return $this->view_action($patient_id, $document_id);
     }
 
-    public function image_procedure_action(?string $patient_id, $document_id)
+    public function image_procedure_action(?string $patient_id, $document_id): string
     {
+        // Anti-IDOR: only permit tagging a document the caller can already access.
+        $this->authorizeDocumentWrite($patient_id, $document_id);
 
         $img_procedure_id = $_POST['image_procedure_id'];
         $proc_code = $_POST['procedure_code'];
@@ -1433,8 +1556,10 @@ class C_Document extends Controller
         return $this->view_action($patient_id, $document_id);
     }
 
-    public function clear_procedure_tag_action(?string $patient_id, $document_id)
+    public function clear_procedure_tag_action(?string $patient_id, $document_id): string
     {
+        // Anti-IDOR: only permit clearing tags on a document the caller can access.
+        $this->authorizeDocumentWrite($patient_id, $document_id);
         if (is_numeric($document_id)) {
             sqlStatement("delete from procedure_result where document_id = ?", [$document_id]);
         }
@@ -1475,8 +1600,11 @@ class C_Document extends Controller
     }
 
 //clear encounter tag public function
-    public function clear_encounter_tag_action(?string $patient_id, $document_id)
+    public function clear_encounter_tag_action(?string $patient_id, $document_id): string
     {
+        // Anti-IDOR: only permit clearing the encounter tag on a document the
+        // caller can already access.
+        $this->authorizeDocumentWrite($patient_id, $document_id);
         if (is_numeric($document_id)) {
             sqlStatement("update documents set encounter_id='0' where foreign_id=? and id = ?", [$patient_id,$document_id]);
         }

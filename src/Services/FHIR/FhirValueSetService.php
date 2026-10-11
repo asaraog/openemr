@@ -28,7 +28,7 @@ use OpenEMR\Services\Search\SearchFieldType;
 use OpenEMR\Services\Search\ServiceField;
 use OpenEMR\Validators\ProcessingResult;
 
-class FhirValueSetService extends FhirServiceBase implements IResourceUSCIGProfileService, IFhirExportableResourceService
+class FhirValueSetService extends FhirServiceBase implements IResourceUSCIGProfileService, IFhirExportableResourceService, INonPatientCompartmentResourceService
 {
     use FhirServiceBaseEmptyTrait;
     use BulkExportSupportAllOperationsTrait;
@@ -99,7 +99,7 @@ class FhirValueSetService extends FhirServiceBase implements IResourceUSCIGProfi
     /**
      * Returns an array mapping FHIR Resource search parameters to OpenEMR search parameters
      */
-    protected function loadSearchParameters()
+    protected function loadSearchParameters(): array
     {
         return [
             '_id' => new FhirSearchParameterDefinition('_id', SearchFieldType::TOKEN, [new ServiceField('id', ServiceField::TYPE_STRING)]),
@@ -112,7 +112,7 @@ class FhirValueSetService extends FhirServiceBase implements IResourceUSCIGProfi
         return new FhirSearchParameterDefinition('_lastUpdated', SearchFieldType::DATETIME, ['sublist_updated_date', 'last_updated']);
     }
 
-    private function getLastModifiedSearchFieldForAppointmentCategories()
+    private function getLastModifiedSearchFieldForAppointmentCategories(): FhirSearchParameterDefinition
     {
         return new FhirSearchParameterDefinition('_lastUpdated', SearchFieldType::DATETIME, ['pc_last_updated']);
     }

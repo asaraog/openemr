@@ -184,7 +184,7 @@ function checkBackgroundServices(): void
                                     // a new value has been inputted, so create the hash that will then be stored
                                     $tmpValue = (new AuthHash())->passwordHash($tmpValue);
                                 }
-                                $fldvalue = $cryptoGen->encryptForDatabase(is_string($tmpValue) ? $tmpValue : null);
+                                $fldvalue = $cryptoGen->encryptForDatabase($tmpValue);
                             }
                         } else {
                             $fldvalue = trim($_POST["form_$i"] ?? '');
@@ -267,7 +267,7 @@ function checkBackgroundServices(): void
                                     // a new value has been inputted, so create the hash that will then be stored
                                     $tmpValue = (new AuthHash())->passwordHash($tmpValue);
                                 }
-                                $fldvalue = $cryptoGen->encryptForDatabase(is_string($tmpValue) ? $tmpValue : null);
+                                $fldvalue = $cryptoGen->encryptForDatabase($tmpValue);
                             }
                         }
 
@@ -373,7 +373,7 @@ function checkBackgroundServices(): void
     $serverConfig = new ServerConfig();
     $apiUrl = $serverConfig->getInternalBaseApiUrl();
     ?>
-    <script src="edit_globals.js" type="text/javascript"></script>
+    <script src="edit_globals.js?v=<?php echo attr_url(OEGlobalsBag::getInstance()->getString('v_js_includes')); ?>" type="text/javascript"></script>
     <script>
         window.oeUI.api.setApiUrlAndCsrfToken(<?php echo js_escape($apiUrl); ?>, <?php echo js_escape(CsrfUtils::collectCsrfToken($session, 'api')); ?>);
     </script>

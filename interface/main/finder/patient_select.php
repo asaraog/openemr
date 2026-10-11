@@ -13,6 +13,8 @@
 require_once("../../globals.php");
 
 use OpenEMR\BC\Utilities;
+use OpenEMR\Common\Acl\AccessDeniedHelper;
+use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Common\Utils\PaginationUtils;
@@ -33,6 +35,10 @@ if (!empty($_REQUEST)) {
     if (!CsrfUtils::verifyCsrfToken($_REQUEST["csrf_token_form"], session: $session)) {
         CsrfUtils::csrfNotVerified();
     }
+}
+
+if (!AclMain::aclCheckCore('patients', 'demo')) {
+    AccessDeniedHelper::denyWithTemplate("ACL check failed for patients/demo: Patient Selector", xl("Patient Selector"));
 }
 
 $fstart = $_REQUEST['fstart'] ?? 0;
@@ -224,18 +230,23 @@ if ($popup) {
     $sqlBindArray = array_merge($boundFilter->getBoundValues(), $sqlBindArray);
     $customWhere = $boundFilter->getFilterClause();
 
-    $where = empty($where) ? $customWhere : "$customWhere AND $where";
+    $where = "$customWhere AND $where";
 
     $sql = "SELECT $given FROM patient_data " .
-    "WHERE $where ORDER BY $orderby LIMIT " . escape_limit($fstart) . ", " . escape_limit($sqllimit);
+    "WHERE $where ORDER BY $orderby LIMIT ? OFFSET ?";
 
+    // snapshot for the count query, before LIMIT/OFFSET binds are added
+    $countBindArray = $sqlBindArray;
+
+    $sqlBindArray[] = $sqllimit;
+    $sqlBindArray[] = (is_numeric($fstart) ? (int) $fstart : 0);
     $rez = sqlStatement($sql, $sqlBindArray);
     $result = [];
     while ($row = sqlFetchArray($rez)) {
         $result[] = $row;
     }
 
-    _set_patient_inc_count($sqllimit, count($result), "$customWhere AND $where", $sqlBindArray);
+    _set_patient_inc_count($sqllimit, count($result), $where, $countBindArray);
 } elseif ($from_page == "cdr_report") {
   // Collect setting from cdr report
     echo "<input type='hidden' name='from_page' value='" . attr($from_page) . "' />\n";
@@ -449,9 +460,9 @@ if ($result) {
             $query = "select max(form_encounter.date) as mydate," .
                   " (to_days(current_date())-to_days(max(form_encounter.date))) as day_diff," .
                   " (max(form_encounter.date) + interval " .
-                  escape_limit($add_days) .
+                  (int) $add_days .
                   " day) as next_appt, dayname(max(form_encounter.date) + interval " .
-                  escape_limit($add_days) .
+                  (int) $add_days .
                   " day) as next_appt_day from form_encounter " .
                   "join billing on billing.encounter = form_encounter.encounter and " .
                   "billing.pid = form_encounter.pid and billing.activity = 1 and " .
@@ -468,9 +479,9 @@ if ($result) {
             $query = "select max(form_encounter.date) as mydate," .
                   " (to_days(current_date())-to_days(max(form_encounter.date))) as day_diff," .
                   " (max(form_encounter.date) + interval " .
-                  escape_limit($add_days) .
+                  (int) $add_days .
                   " day) as next_appt, dayname(max(form_encounter.date) + interval " .
-                  escape_limit($add_days) .
+                  (int) $add_days .
                   " day) as next_appt_day from form_encounter " .
                   " where form_encounter.pid = ?";
             $statement = sqlStatement($query, [$iter["pid"]]);

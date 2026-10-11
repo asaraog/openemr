@@ -307,7 +307,7 @@ function narrative($pid, $encounter, $cols, $form_id, $choice = 'full'): void
     ?>
 
     <?php Header::setupHeader(['no_dialog', 'no_jquery', 'fontawesome']); ?>
-    <link rel="stylesheet" href="../../forms/eye_mag/css/report.css">
+    <link rel="stylesheet" href="../../forms/eye_mag/css/report.css?v=<?php echo attr_url(OEGlobalsBag::getInstance()->getString('v_js_includes')); ?>">
     <style>
         <?php if ($PDF_OUTPUT) { ?>
         .mot {
@@ -1894,7 +1894,7 @@ function narrative($pid, $encounter, $cols, $form_id, $choice = 'full'): void
                                         padding: 2px 10px;
                                         width: 200px;"><?php echo text($ODREDDESAT); ?></td>
                                                 <td style="text-align:center;font-weight:bold;"><span
-                                                            title="<?php xla('Variation in red color discrimination between the eyes (eg. OD=100, OS=75)'); ?>"><?php echo xlt('Red Desaturation'); ?></span>
+                                                            title="<?php echo xla('Variation in red color discrimination between the eyes (eg. OD=100, OS=75)'); ?>"><?php echo xlt('Red Desaturation'); ?></span>
                                                 </td>
                                                 <td style="text-align:left;
                                         flex-wrap: wrap;
@@ -2581,7 +2581,7 @@ function display_draw_image($zone, $encounter, $pid): void
     return;
 }
 
-function report_ACT($term)
+function report_ACT($term): string
 {
     $term = nl2br(htmlspecialchars((string) $term, ENT_NOQUOTES));
     return $term . "&nbsp;";
